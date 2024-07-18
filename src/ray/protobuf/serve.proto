@@ -318,6 +318,20 @@ service RayServeAPIService {
   rpc Healthz(HealthzRequest) returns (HealthzResponse);
 }
 
+message ASGIRequest {
+  bytes pickled_request_metadata = 1;
+  bytes request_args = 2;
+  bytes request_kwargs = 3;
+}
+
+message ASGIResponse {
+  bytes msg = 1;
+}
+
+service ASGIService {
+  rpc DoRequest(ASGIRequest) returns (stream ASGIResponse);
+}
+
 // Used for gRPC related tests
 message UserDefinedMessage {
   string name = 1;

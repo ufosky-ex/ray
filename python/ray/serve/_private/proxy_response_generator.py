@@ -87,11 +87,12 @@ class ProxyResponseGenerator(_ProxyResponseGeneratorBase):
             raise StopAsyncIteration
 
         try:
-            if isinstance(self._response, DeploymentResponseGenerator):
-                result = await self._get_next_streaming_result()
-            else:
-                result = await self._get_unary_result()
-                self._done = True
+            # if isinstance(self._response, DeploymentResponseGenerator):
+            #     result = await self._get_next_streaming_result()
+            # else:
+            #     result = await self._get_unary_result()
+            #     self._done = True
+            result = (await self._get_next_streaming_result()).msg
 
             if self._result_callback is not None:
                 result = self._result_callback(result)

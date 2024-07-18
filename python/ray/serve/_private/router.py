@@ -489,6 +489,8 @@ class Router:
             obj_ref_gen = None
             try:
                 (
+                    # This should be of type async generator, and yielding from it
+                    # should give bytes that need to be deserialized
                     obj_ref_gen,
                     queue_len_info,
                 ) = await replica.send_request_with_rejection(pr)
@@ -545,7 +547,7 @@ class Router:
                 )
 
                 # Keep track of requests that have been sent out to replicas
-                if RAY_SERVE_COLLECT_AUTOSCALING_METRICS_ON_HANDLE:
+                if False and RAY_SERVE_COLLECT_AUTOSCALING_METRICS_ON_HANDLE:
                     self._metrics_manager.inc_num_running_requests_for_replica(
                         replica_id
                     )
@@ -558,7 +560,7 @@ class Router:
                     else:
                         ref.completed()._on_completed(callback)
 
-                return ref
+                return ref.__aiter__()
             except asyncio.CancelledError:
                 # NOTE(edoakes): this is not strictly necessary because
                 # there are currently no `await` statements between

@@ -11,6 +11,7 @@ from functools import wraps
 from importlib import import_module
 from typing import Any, AsyncGenerator, Callable, Dict, Optional, Tuple, Union
 
+import grpc
 import starlette.responses
 
 import ray
@@ -61,6 +62,7 @@ from ray.serve._private.version import DeploymentVersion
 from ray.serve.config import AutoscalingConfig
 from ray.serve.deployment import Deployment
 from ray.serve.exceptions import RayServeException
+from ray.serve.generated import serve_pb2, serve_pb2_grpc
 from ray.serve.schema import LoggingConfig
 
 logger = logging.getLogger(SERVE_LOGGER_NAME)
@@ -289,6 +291,9 @@ class ReplicaActor:
             self._deployment_config.autoscaling_config,
         )
 
+        self._server = grpc.aio.server()
+        self._grpc_port: Optional[int] = None
+
     def _set_internal_replica_context(self, *, servable_object: Callable = None):
         ray.serve.context._set_internal_replica_context(
             replica_id=self._replica_id,
@@ -468,6 +473,47 @@ class ReplicaActor:
             if wait_for_message_task is not None and not wait_for_message_task.done():
                 wait_for_message_task.cancel()
 
+    async def DoRequest(
+        self, request: serve_pb2.ASGIRequest, context: grpc.aio.ServicerContext
+    ) -> AsyncGenerator[Any, None]:
+        request_metadata = pickle.loads(request.pickled_request_metadata)
+        limit = self._deployment_config.max_ongoing_requests
+        num_ongoing_requests = self.get_num_ongoing_requests()
+        if num_ongoing_requests >= limit:
+            logger.warning(
+                f"Replica at capacity of max_ongoing_requests={limit}, "
+                f"rejecting request {request_metadata.request_id}.",
+                extra={"log_to_stderr": False},
+            )
+
+            yield serve_pb2.ASGIResponse(
+                msg=pickle.dumps(
+                    ReplicaQueueLengthInfo(
+                        accepted=False, num_ongoing_requests=num_ongoing_requests
+                    )
+                )
+            )
+            return
+
+        with self._wrap_user_method_call(request_metadata):
+            yield serve_pb2.ASGIResponse(
+                msg=pickle.dumps(
+                    ReplicaQueueLengthInfo(
+                        accepted=True,
+                        # NOTE(edoakes): `_wrap_user_method_call` will increment the number
+                        # of ongoing requests to include this one, so re-fetch the value.
+                        num_ongoing_requests=self.get_num_ongoing_requests(),
+                    )
+                )
+            )
+
+            async for result in self._call_user_generator(
+                request_metadata,
+                pickle.loads(request.request_args),
+                pickle.loads(request.request_kwargs),
+            ):
+                yield serve_pb2.ASGIResponse(msg=result)
+
     async def handle_request_streaming(
         self,
         pickled_request_metadata: bytes,
@@ -626,6 +672,10 @@ class ReplicaActor:
             if self._initialization_latency is None:
                 self._initialization_latency = time.time() - initialization_start_time
 
+            serve_pb2_grpc.add_ASGIServiceServicer_to_server(self, self._server)
+            self._grpc_port = self._server.add_insecure_port("[::]:0")
+            await self._server.start()
+
             return self._get_metadata()
         except Exception:
             raise RuntimeError(traceback.format_exc()) from None
@@ -670,11 +720,12 @@ class ReplicaActor:
 
     def _get_metadata(
         self,
-    ) -> Tuple[DeploymentConfig, DeploymentVersion, Optional[float]]:
+    ) -> Tuple[DeploymentConfig, DeploymentVersion, Optional[float], Optional[int]]:
         return (
             self._version.deployment_config,
             self._version,
             self._initialization_latency,
+            self._grpc_port,
         )
 
     def _save_cpu_profile_data(self) -> str:

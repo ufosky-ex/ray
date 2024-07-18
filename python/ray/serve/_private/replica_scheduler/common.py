@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
+import grpc
+
 import ray
 from ray import ObjectRef, ObjectRefGenerator
 from ray.serve._private.common import (
@@ -19,6 +21,7 @@ from ray.serve._private.constants import (
     SERVE_LOGGER_NAME,
 )
 from ray.serve._private.utils import JavaActorHandleProxy
+from ray.serve.generated import serve_pb2, serve_pb2_grpc
 from ray.serve.generated.serve_pb2 import RequestMetadata as RequestMetadataProto
 
 logger = logging.getLogger(SERVE_LOGGER_NAME)
@@ -90,6 +93,8 @@ class ActorReplicaWrapper:
     def __init__(self, replica_info: RunningReplicaInfo):
         self._replica_info = replica_info
         self._multiplexed_model_ids = set(replica_info.multiplexed_model_ids)
+        self._channel = grpc.aio.insecure_channel(f"localhost:{replica_info.grpc_port}")
+        self._stub = serve_pb2_grpc.ASGIServiceStub(self._channel)
 
         if replica_info.is_cross_language:
             self._actor_handle = JavaActorHandleProxy(replica_info.actor_handle)
@@ -158,6 +163,13 @@ class ActorReplicaWrapper:
         self, pr: PendingRequest, *, with_rejection: bool
     ) -> Union[ray.ObjectRef, ObjectRefGenerator]:
         """Send the request to a Python replica."""
+        return self._stub.DoRequest(
+            serve_pb2.ASGIRequest(
+                pickled_request_metadata=pickle.dumps(pr.metadata),
+                request_args=pickle.dumps(pr.args),
+                request_kwargs=pickle.dumps(pr.kwargs),
+            )
+        )
         if with_rejection:
             # Call a separate handler that may reject the request.
             # This handler is *always* a streaming call and the first message will
@@ -188,16 +200,19 @@ class ActorReplicaWrapper:
             not self._replica_info.is_cross_language
         ), "Request rejection not supported for Java."
 
-        obj_ref_gen = self._send_request_python(pr, with_rejection=True)
+        r = self._send_request_python(pr, with_rejection=True)
         try:
-            first_ref = await obj_ref_gen.__anext__()
-            queue_len_info: ReplicaQueueLengthInfo = pickle.loads(await first_ref)
+            # first_ref = await obj_ref_gen.__anext__()
+            # queue_len_info: ReplicaQueueLengthInfo = pickle.loads(await first_ref)
+            first_msg = await r.__aiter__().__anext__()
+            queue_len_info: ReplicaQueueLengthInfo = pickle.loads(first_msg.msg)
 
             if not queue_len_info.accepted:
                 return None, queue_len_info
             else:
-                return obj_ref_gen, queue_len_info
+                return r, queue_len_info
         except asyncio.CancelledError as e:
+            # TODO(zcin): figure out how to cancel
             ray.cancel(obj_ref_gen)
             raise e from None
 

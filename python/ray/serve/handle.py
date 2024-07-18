@@ -42,6 +42,7 @@ def _create_or_get_global_asyncio_event_loop_in_thread():
 
     Thread-safe.
     """
+    return asyncio.get_running_loop()
     global _global_async_loop
     if _global_async_loop is None:
         with _global_async_loop_creation_lock:
@@ -363,8 +364,8 @@ class _DeploymentResponseBase:
                 # Use `asyncio.wrap_future` so `self._object_ref_future` can be awaited
                 # safely from any asyncio loop.
                 obj_ref_or_gen = await asyncio.wrap_future(self._object_ref_future)
-                if self._should_resolve_gen_to_obj_ref(obj_ref_or_gen):
-                    obj_ref_or_gen = await obj_ref_or_gen.__anext__()
+                # if self._should_resolve_gen_to_obj_ref(obj_ref_or_gen):
+                #     obj_ref_or_gen = await obj_ref_or_gen.__anext__()
 
                 self._object_ref_or_gen = obj_ref_or_gen
 
@@ -662,8 +663,9 @@ class DeploymentResponseGenerator(_DeploymentResponseBase):
         if self._obj_ref_gen is None:
             self._obj_ref_gen = await self._to_object_ref_gen(_record_telemetry=False)
 
-        next_obj_ref = await self._obj_ref_gen.__anext__()
-        return await next_obj_ref
+        # next_obj_ref = await self._obj_ref_gen.__anext__()
+        # return await next_obj_ref
+        return await self._obj_ref_gen.__anext__()
 
     def __iter__(self) -> Iterator[Any]:
         return self
