@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import inspect
 import logging
 import threading
 import time
@@ -16,7 +17,7 @@ from ray.serve._private.common import (
     RequestMetadata,
     RequestProtocol,
 )
-from ray.serve._private.constants import SERVE_LOGGER_NAME
+from ray.serve._private.constants import RAY_SERVE_USE_GRPC_STREAMING, SERVE_LOGGER_NAME
 from ray.serve._private.default_impl import create_cluster_node_info_cache
 from ray.serve._private.router import Router
 from ray.serve._private.usage import ServeUsageTag
@@ -339,6 +340,19 @@ class _DeploymentResponseBase:
         so if this is a unary response we need to resolve it to its first (and only)
         output ObjectRef.
         """
+        if RAY_SERVE_USE_GRPC_STREAMING:
+            # print(
+            #     "pikachu inspect.isasyncgen(obj_ref_or_gen)",
+            #     inspect.isasyncgen(obj_ref_or_gen),
+            # )
+            # print(
+            #     "pikachu isinstance(self, DeploymentResponse)",
+            #     isinstance(self, DeploymentResponse),
+            # )
+            return inspect.isasyncgen(obj_ref_or_gen) and isinstance(
+                self, DeploymentResponse
+            )
+
         return isinstance(obj_ref_or_gen, ray.ObjectRefGenerator) and isinstance(
             self, DeploymentResponse
         )
@@ -364,8 +378,18 @@ class _DeploymentResponseBase:
                 # Use `asyncio.wrap_future` so `self._object_ref_future` can be awaited
                 # safely from any asyncio loop.
                 obj_ref_or_gen = await asyncio.wrap_future(self._object_ref_future)
-                # if self._should_resolve_gen_to_obj_ref(obj_ref_or_gen):
-                #     obj_ref_or_gen = await obj_ref_or_gen.__anext__()
+                # print(
+                #     "pikachu _to_object_ref_or_gen, obj_ref_or_gen:",
+                #     obj_ref_or_gen,
+                #     type(obj_ref_or_gen),
+                # )
+                if self._should_resolve_gen_to_obj_ref(obj_ref_or_gen):
+                    obj_ref_or_gen = await obj_ref_or_gen.__anext__()
+                    # print(
+                    #     "pikachu obj_ref_or_gen after!",
+                    #     obj_ref_or_gen,
+                    #     type(obj_ref_or_gen),
+                    # )
 
                 self._object_ref_or_gen = obj_ref_or_gen
 
@@ -528,7 +552,10 @@ class DeploymentResponse(_DeploymentResponseBase):
         obj_ref = yield from self._to_object_ref_or_gen(
             _record_telemetry=False
         ).__await__()
-        result = yield from obj_ref.__await__()
+        if RAY_SERVE_USE_GRPC_STREAMING:
+            result = obj_ref.msg
+        else:
+            result = yield from obj_ref.__await__()
         return result
 
     def result(self, *, timeout_s: Optional[float] = None) -> Any:
@@ -663,9 +690,19 @@ class DeploymentResponseGenerator(_DeploymentResponseBase):
         if self._obj_ref_gen is None:
             self._obj_ref_gen = await self._to_object_ref_gen(_record_telemetry=False)
 
-        # next_obj_ref = await self._obj_ref_gen.__anext__()
-        # return await next_obj_ref
-        return await self._obj_ref_gen.__anext__()
+        # print(
+        #     "pikachu __anext__ self._obj_ref_gen",
+        #     self._obj_ref_gen,
+        #     type(self._obj_ref_gen),
+        # )
+        if RAY_SERVE_USE_GRPC_STREAMING:
+            r = await self._obj_ref_gen.__anext__()
+            # print("pikachu __anext__ r", type(r), r)
+            return r
+
+        next_obj_ref = await self._obj_ref_gen.__anext__()
+        # print("pikachu __anext__ next_obj_ref", type(next_obj_ref), next_obj_ref)
+        return await next_obj_ref
 
     def __iter__(self) -> Iterator[Any]:
         return self

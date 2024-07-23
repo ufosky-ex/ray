@@ -54,15 +54,25 @@ async def run_benchmark(
     num_trials: int,
     trial_runtime: float,
 ) -> Tuple[float, float]:
+    print("batch size", batch_size)
+
     async def _do_single_batch():
         await asyncio.gather(*[_consume_single_stream() for _ in range(batch_size)])
 
-    return await run_throughput_benchmark(
-        fn=_do_single_batch,
-        multiplier=batch_size * tokens_per_request,
-        num_trials=num_trials,
-        trial_runtime=trial_runtime,
-    )
+    import time
+
+    start = time.time()
+    await _do_single_batch()
+    end = time.time()
+    print("time to stream 1000 tokens:", end - start)
+    return 0, 0
+
+    # return await run_throughput_benchmark(
+    #     fn=_do_single_batch,
+    #     multiplier=batch_size * tokens_per_request,
+    #     num_trials=num_trials,
+    #     trial_runtime=trial_runtime,
+    # )
 
 
 @click.command(help="Benchmark streaming HTTP throughput.")

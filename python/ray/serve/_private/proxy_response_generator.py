@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from asyncio.tasks import FIRST_COMPLETED
 from typing import Any, Callable, Optional, Union
 
-from ray.serve._private.constants import SERVE_LOGGER_NAME
+from ray.serve._private.constants import RAY_SERVE_USE_GRPC_STREAMING, SERVE_LOGGER_NAME
 from ray.serve._private.utils import calculate_remaining_timeout
 from ray.serve.handle import DeploymentResponse, DeploymentResponseGenerator
 
@@ -87,12 +87,14 @@ class ProxyResponseGenerator(_ProxyResponseGeneratorBase):
             raise StopAsyncIteration
 
         try:
-            # if isinstance(self._response, DeploymentResponseGenerator):
-            #     result = await self._get_next_streaming_result()
-            # else:
-            #     result = await self._get_unary_result()
-            #     self._done = True
-            result = (await self._get_next_streaming_result()).msg
+            if RAY_SERVE_USE_GRPC_STREAMING:
+                result = (await self._get_next_streaming_result()).msg
+            else:
+                if isinstance(self._response, DeploymentResponseGenerator):
+                    result = await self._get_next_streaming_result()
+                else:
+                    result = await self._get_unary_result()
+                    self._done = True
 
             if self._result_callback is not None:
                 result = self._result_callback(result)
@@ -114,7 +116,19 @@ class ProxyResponseGenerator(_ProxyResponseGeneratorBase):
         return result
 
     async def _await_response_anext(self) -> Any:
-        return await self._response.__anext__()
+        # return await self._response.__anext__()
+        # print(
+        #     "pikachu, proxy response generator response",
+        #     self._response,
+        #     type(self._response),
+        # )
+        r = await self._response.__anext__()
+        # print(
+        #     "pikachu, proxy response generator await self._response.__anext__()",
+        #     type(r),
+        #     r,
+        # )
+        return r
 
     async def _get_next_streaming_result(self) -> Any:
         next_result_task = asyncio.create_task(self._await_response_anext())

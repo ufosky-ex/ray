@@ -77,7 +77,13 @@ def main(
     )
     h = serve.run(app)
 
-    mean, stddev = h.run_benchmark.remote().result()
+    async def run_benchmark():
+        return await h.run_benchmark.remote()
+
+    import asyncio
+
+    mean, stddev = asyncio.new_event_loop().run_until_complete(run_benchmark())
+    # mean, stddev = h.run_benchmark.remote().result()
     print(
         "DeploymentHandle streaming throughput ({}) {}: {} +- {} tokens/s".format(
             io_mode.upper(),

@@ -25,6 +25,7 @@ from ray.serve._private.constants import (
     RAY_SERVE_ENABLE_STRICT_MAX_ONGOING_REQUESTS,
     RAY_SERVE_HANDLE_AUTOSCALING_METRIC_RECORD_PERIOD_S,
     RAY_SERVE_PROXY_PREFER_LOCAL_AZ_ROUTING,
+    RAY_SERVE_USE_GRPC_STREAMING,
     SERVE_LOGGER_NAME,
 )
 from ray.serve._private.long_poll import LongPollClient, LongPollNamespace
@@ -547,7 +548,10 @@ class Router:
                 )
 
                 # Keep track of requests that have been sent out to replicas
-                if False and RAY_SERVE_COLLECT_AUTOSCALING_METRICS_ON_HANDLE:
+                if (
+                    not RAY_SERVE_USE_GRPC_STREAMING
+                    and RAY_SERVE_COLLECT_AUTOSCALING_METRICS_ON_HANDLE
+                ):
                     self._metrics_manager.inc_num_running_requests_for_replica(
                         replica_id
                     )
@@ -560,7 +564,17 @@ class Router:
                     else:
                         ref.completed()._on_completed(callback)
 
-                return ref.__aiter__()
+                if RAY_SERVE_USE_GRPC_STREAMING:
+                    # print("pikachu ref", ref, type(ref))
+                    # print(
+                    #     "pikachu ref.__aiter__()",
+                    #     ref.__aiter__(),
+                    #     type(ref.__aiter__()),
+                    # )
+                    return ref.__aiter__()
+                else:
+                    return ref
+
             except asyncio.CancelledError:
                 # NOTE(edoakes): this is not strictly necessary because
                 # there are currently no `await` statements between

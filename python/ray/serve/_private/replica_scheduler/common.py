@@ -18,6 +18,7 @@ from ray.serve._private.common import (
 )
 from ray.serve._private.constants import (
     RAY_SERVE_QUEUE_LENGTH_CACHE_TIMEOUT_S,
+    RAY_SERVE_USE_GRPC_STREAMING,
     SERVE_LOGGER_NAME,
 )
 from ray.serve._private.utils import JavaActorHandleProxy
@@ -163,13 +164,15 @@ class ActorReplicaWrapper:
         self, pr: PendingRequest, *, with_rejection: bool
     ) -> Union[ray.ObjectRef, ObjectRefGenerator]:
         """Send the request to a Python replica."""
-        return self._stub.DoRequest(
-            serve_pb2.ASGIRequest(
-                pickled_request_metadata=pickle.dumps(pr.metadata),
-                request_args=pickle.dumps(pr.args),
-                request_kwargs=pickle.dumps(pr.kwargs),
+        if RAY_SERVE_USE_GRPC_STREAMING:
+            return self._stub.DoRequest(
+                serve_pb2.ASGIRequest(
+                    pickled_request_metadata=pickle.dumps(pr.metadata),
+                    request_args=pickle.dumps(pr.args),
+                    request_kwargs=pickle.dumps(pr.kwargs),
+                )
             )
-        )
+
         if with_rejection:
             # Call a separate handler that may reject the request.
             # This handler is *always* a streaming call and the first message will
@@ -200,17 +203,19 @@ class ActorReplicaWrapper:
             not self._replica_info.is_cross_language
         ), "Request rejection not supported for Java."
 
-        r = self._send_request_python(pr, with_rejection=True)
+        obj_ref_gen = self._send_request_python(pr, with_rejection=True)
         try:
-            # first_ref = await obj_ref_gen.__anext__()
-            # queue_len_info: ReplicaQueueLengthInfo = pickle.loads(await first_ref)
-            first_msg = await r.__aiter__().__anext__()
-            queue_len_info: ReplicaQueueLengthInfo = pickle.loads(first_msg.msg)
+            if RAY_SERVE_USE_GRPC_STREAMING:
+                first_msg = await obj_ref_gen.__aiter__().__anext__()
+                queue_len_info: ReplicaQueueLengthInfo = pickle.loads(first_msg.msg)
+            else:
+                first_ref = await obj_ref_gen.__anext__()
+                queue_len_info: ReplicaQueueLengthInfo = pickle.loads(await first_ref)
 
             if not queue_len_info.accepted:
                 return None, queue_len_info
             else:
-                return r, queue_len_info
+                return obj_ref_gen, queue_len_info
         except asyncio.CancelledError as e:
             # TODO(zcin): figure out how to cancel
             ray.cancel(obj_ref_gen)

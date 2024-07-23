@@ -400,6 +400,7 @@ class ReplicaActor:
         **request_kwargs,
     ) -> Tuple[bytes, Any]:
         """Entrypoint for `stream=False` calls."""
+        # print("pikachu handle_request")
         request_metadata = pickle.loads(pickled_request_metadata)
         with self._wrap_user_method_call(request_metadata):
             return await self._user_callable_wrapper.call_user_method(
@@ -417,6 +418,7 @@ class ReplicaActor:
         The user method is called in an asyncio `Task` and places its results on a
         `result_queue`. This method pulls and yields from the `result_queue`.
         """
+        # print("pikachu _call_user_generator")
         call_user_method_future = None
         wait_for_message_task = None
         try:
@@ -443,8 +445,13 @@ class ReplicaActor:
                     return_when=asyncio.FIRST_COMPLETED,
                 )
 
+                # print(
+                #     "call_user_method_future in done", call_user_method_future in done
+                # )
+                # print("wait_for_message_task in done", wait_for_message_task in done)
                 # Consume and yield all available messages in the queue.
                 messages = result_queue.get_messages_nowait()
+                # print("pikachu messages", messages)
                 if messages:
                     # HTTP (ASGI) messages are only consumed by the proxy so batch them
                     # and use vanilla pickle (we know it's safe because these messages
@@ -476,6 +483,7 @@ class ReplicaActor:
     async def DoRequest(
         self, request: serve_pb2.ASGIRequest, context: grpc.aio.ServicerContext
     ) -> AsyncGenerator[Any, None]:
+        print("pikachu do request")
         request_metadata = pickle.loads(request.pickled_request_metadata)
         limit = self._deployment_config.max_ongoing_requests
         num_ongoing_requests = self.get_num_ongoing_requests()
@@ -507,11 +515,28 @@ class ReplicaActor:
                 )
             )
 
-            async for result in self._call_user_generator(
-                request_metadata,
-                pickle.loads(request.request_args),
-                pickle.loads(request.request_kwargs),
-            ):
+            if request_metadata.is_streaming:
+                # async for result in self._call_user_generator(
+                #     request_metadata,
+                #     request_args,
+                #     request_kwargs,
+                # ):
+                #     yield result
+                async for result in self._call_user_generator(
+                    request_metadata,
+                    pickle.loads(request.request_args),
+                    pickle.loads(request.request_kwargs),
+                ):
+                    # print("pikachu yielded result", result)
+                    yield serve_pb2.ASGIResponse(msg=result)
+
+            else:
+                result = await self._user_callable_wrapper.call_user_method(
+                    request_metadata,
+                    pickle.loads(request.request_args),
+                    pickle.loads(request.request_kwargs),
+                )
+                # print(f"pikachu about to yield asgiresponse(msg={result})")
                 yield serve_pb2.ASGIResponse(msg=result)
 
     async def handle_request_streaming(
@@ -521,6 +546,7 @@ class ReplicaActor:
         **request_kwargs,
     ) -> AsyncGenerator[Any, None]:
         """Generator that is the entrypoint for all `stream=True` handle calls."""
+        # print("pikachu handle_request_streaming")
         request_metadata = pickle.loads(pickled_request_metadata)
         with self._wrap_user_method_call(request_metadata):
             async for result in self._call_user_generator(
@@ -536,6 +562,7 @@ class ReplicaActor:
         *request_args,
         **request_kwargs,
     ) -> AsyncGenerator[Any, None]:
+        print("pikachu handle_request_with_rejection")
         """Entrypoint for all requests with strict max_ongoing_requests enforcement.
 
         The first response from this generator is always a system message indicating
@@ -1090,6 +1117,8 @@ class UserCallableWrapper:
         but for ASGI apps (like FastAPI), the actual method will be a regular function
         implementing the ASGI `__call__` protocol.
         """
+        # print("pikachu _handle_user_method_result <result>:", result)
+        # print("pikachu request_metadata.is_streaming", request_metadata.is_streaming)
         result_is_gen = inspect.isgenerator(result)
         result_is_async_gen = inspect.isasyncgen(result)
         if request_metadata.is_streaming:
