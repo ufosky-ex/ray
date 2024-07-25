@@ -562,7 +562,7 @@ class ReplicaActor:
         *request_args,
         **request_kwargs,
     ) -> AsyncGenerator[Any, None]:
-        print("pikachu handle_request_with_rejection")
+        # print("pikachu handle_request_with_rejection")
         """Entrypoint for all requests with strict max_ongoing_requests enforcement.
 
         The first response from this generator is always a system message indicating
