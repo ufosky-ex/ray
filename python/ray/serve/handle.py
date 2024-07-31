@@ -43,7 +43,9 @@ def _create_or_get_global_asyncio_event_loop_in_thread():
 
     Thread-safe.
     """
-    return asyncio.get_running_loop()
+    if RAY_SERVE_USE_GRPC_STREAMING:
+        return asyncio.get_running_loop()
+
     global _global_async_loop
     if _global_async_loop is None:
         with _global_async_loop_creation_lock:
@@ -461,11 +463,20 @@ class _DeploymentResponseBase:
         if self._cancelled:
             return
 
+        print("cindy handle request cancelled")
         self._cancelled = True
         if not self._object_ref_future.done():
             self._object_ref_future.cancel()
         elif self._object_ref_future.exception() is None:
-            ray.cancel(self._object_ref_future.result())
+            print(
+                "cindy result",
+                type(self._object_ref_future.result()),
+                self._object_ref_future.result(),
+            )
+            if RAY_SERVE_USE_GRPC_STREAMING:
+                self._object_ref_future.cancel()
+            else:
+                ray.cancel(self._object_ref_future.result())
 
     @DeveloperAPI
     def cancelled(self) -> bool:

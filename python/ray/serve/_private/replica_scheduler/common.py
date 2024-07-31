@@ -218,7 +218,14 @@ class ActorReplicaWrapper:
                 return obj_ref_gen, queue_len_info
         except asyncio.CancelledError as e:
             # TODO(zcin): figure out how to cancel
-            ray.cancel(obj_ref_gen)
+            if RAY_SERVE_USE_GRPC_STREAMING:
+                print(
+                    "cindy received cancel in send_request_with_rejection",
+                    type(obj_ref_gen),
+                    obj_ref_gen,
+                )
+            else:
+                ray.cancel(obj_ref_gen)
             raise e from None
 
 

@@ -359,6 +359,7 @@ class ReplicaActor:
             yield
         except asyncio.CancelledError as e:
             user_exception = e
+            print("cindy received cancelled error!")
         except Exception as e:
             user_exception = e
             logger.error(f"Request failed:\n{e}")
@@ -483,7 +484,6 @@ class ReplicaActor:
     async def DoRequest(
         self, request: serve_pb2.ASGIRequest, context: grpc.aio.ServicerContext
     ) -> AsyncGenerator[Any, None]:
-        print("pikachu do request")
         request_metadata = pickle.loads(request.pickled_request_metadata)
         limit = self._deployment_config.max_ongoing_requests
         num_ongoing_requests = self.get_num_ongoing_requests()

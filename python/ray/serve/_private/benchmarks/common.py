@@ -19,6 +19,60 @@ from ray.serve.generated import serve_pb2, serve_pb2_grpc
 from ray.serve.handle import DeploymentHandle
 
 
+async def run_streaming_benchmark(
+    url: str, num_requests: int, *, num_warmup_requests: int = 100
+) -> pd.Series:
+    import requests
+
+    async with aiohttp.ClientSession(raise_for_status=True) as session:
+        latencies = []
+        ttfts = []
+        average_itls = []
+
+        for i in tqdm(range(num_requests + num_warmup_requests)):
+            start = time.perf_counter()
+            toft = None  # time of first token
+
+            # async streaming
+            async with session.get(url) as r:
+                # async for data, _ in r.content.iter_chunks():
+                #     toft = toft or time.perf_counter()
+                #     if i >= num_warmup_requests:
+                #         print("toft", toft, data)
+                async for line in r.content.iter_chunks():
+                    toft = toft or time.perf_counter()
+
+            # sync streaming
+            # r = requests.get("http://localhost:8000", stream=True)
+            # for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
+            #     toft = toft or time.perf_counter()
+            # if toft is None:
+            #     toft = time.perf_counter()
+            #     if i == num_warmup_requests:
+            #         print("time of first token", 1000 * (toft - start))
+
+            end = time.perf_counter()
+
+            # Don't include warm-up requests.
+            if i >= num_warmup_requests:
+                print("start", start)
+                print("end", end)
+                latency = end - start
+                ttft = toft - start
+                itl = (latency - ttft) / (1000 - 1)
+
+                latencies.append(1000 * latency)
+                ttfts.append(1000 * ttft)
+                average_itls.append(1000 * itl)
+
+    print("pikachu!")
+    print("p50 ttft", pd.Series(ttfts).quantile(0.5))
+    print("p50 Inter token latency", pd.Series(average_itls).quantile(0.5))
+    print("p50 latency", pd.Series(latencies).quantile(0.5))
+
+    return pd.Series(latencies)
+
+
 async def run_latency_benchmark(
     f: Callable, num_requests: int, *, num_warmup_requests: int = 100
 ) -> pd.Series:
@@ -60,6 +114,7 @@ async def run_throughput_benchmark(
             await fn()
             count += 1
         end = time.perf_counter()
+        print("count", count)
         stats.append(multiplier * count / (end - start))
 
     return round(np.mean(stats), 2), round(np.std(stats), 2)

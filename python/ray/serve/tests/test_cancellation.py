@@ -61,8 +61,8 @@ def test_cancel_on_http_client_disconnect_during_execution(
         requests.get("http://localhost:8000", timeout=0.5)
 
     # Both the HTTP handler and the inner deployment handle call should be cancelled.
-    ray.get(inner_signal_actor.wait.remote(), timeout=10)
     ray.get(outer_signal_actor.wait.remote(), timeout=10)
+    ray.get(inner_signal_actor.wait.remote(), timeout=10)
 
 
 def test_cancel_on_http_client_disconnect_during_assignment(serve_instance):

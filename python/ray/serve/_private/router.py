@@ -564,6 +564,7 @@ class Router:
                     else:
                         ref.completed()._on_completed(callback)
 
+                print("cindy ref", type(ref), ref)
                 if RAY_SERVE_USE_GRPC_STREAMING:
                     # print("pikachu ref", ref, type(ref))
                     # print(
