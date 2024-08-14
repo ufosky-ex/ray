@@ -7,11 +7,7 @@ import click
 from starlette.responses import StreamingResponse
 
 from ray import serve
-from ray.serve._private.benchmarks.common import (
-    run_latency_benchmark,
-    run_streaming_benchmark,
-    run_throughput_benchmark,
-)
+from ray.serve._private.benchmarks.common import run_throughput_benchmark
 from ray.serve.handle import DeploymentHandle
 
 
@@ -25,11 +21,6 @@ class Downstream:
     async def stream(self):
         for i in range(self._tokens_per_request):
             yield "hi"
-
-        # yield b"hi"
-        # await asyncio.sleep(5)
-        # for i in range(self._tokens_per_request - 1):
-        #     yield b"hi"
 
     def __call__(self, *args):
         return StreamingResponse(self.stream())
@@ -63,32 +54,15 @@ async def run_benchmark(
     num_trials: int,
     trial_runtime: float,
 ) -> Tuple[float, float]:
-    print("batch size", batch_size)
+    async def _do_single_batch():
+        await asyncio.gather(*[_consume_single_stream() for _ in range(batch_size)])
 
-    # async def _do_single_batch():
-    #     await asyncio.gather(*[_consume_single_stream() for _ in range(batch_size)])
-
-    # import time
-    #
-    # start = time.time()
-    # await _do_single_batch()
-    # end = time.time()
-    # print("time to stream 1000 tokens:", end - start)
-    # return 0, 0
-
-    # return await run_throughput_benchmark(
-    #     fn=_do_single_batch,
-    #     multiplier=batch_size * tokens_per_request,
-    #     num_trials=num_trials,
-    #     trial_runtime=trial_runtime,
-    # )
-    # latencies = await run_latency_benchmark(f=_do_single_batch, num_requests=num_trials)
-    latencies = await run_streaming_benchmark(
-        url="http://localhost:8000", num_requests=num_trials
+    return await run_throughput_benchmark(
+        fn=_do_single_batch,
+        multiplier=batch_size * tokens_per_request,
+        num_trials=num_trials,
+        trial_runtime=trial_runtime,
     )
-    print("p50:", latencies.quantile(0.5))
-    print("p90:", latencies.quantile(0.9))
-    return 0, 0
 
 
 @click.command(help="Benchmark streaming HTTP throughput.")

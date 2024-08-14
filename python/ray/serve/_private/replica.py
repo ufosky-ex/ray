@@ -17,7 +17,7 @@ import starlette.responses
 import ray
 from ray import cloudpickle
 from ray._private.utils import get_or_create_event_loop
-from ray.actor import ActorClass
+from ray.actor import ActorClass, ActorHandle
 from ray.remote_function import RemoteFunction
 from ray.serve import metrics
 from ray.serve._private.common import (
@@ -326,6 +326,9 @@ class ReplicaActor:
             component_id=self._component_id,
         )
 
+    def push_proxy_handle(self, handle: ActorHandle):
+        pass
+
     def get_num_ongoing_requests(self) -> int:
         """Fetch the number of ongoing requests at this replica (queue length).
 
@@ -359,7 +362,6 @@ class ReplicaActor:
             yield
         except asyncio.CancelledError as e:
             user_exception = e
-            print("cindy received cancelled error!")
         except Exception as e:
             user_exception = e
             logger.error(f"Request failed:\n{e}")
@@ -401,7 +403,6 @@ class ReplicaActor:
         **request_kwargs,
     ) -> Tuple[bytes, Any]:
         """Entrypoint for `stream=False` calls."""
-        # print("pikachu handle_request")
         request_metadata = pickle.loads(pickled_request_metadata)
         with self._wrap_user_method_call(request_metadata):
             return await self._user_callable_wrapper.call_user_method(
@@ -419,7 +420,6 @@ class ReplicaActor:
         The user method is called in an asyncio `Task` and places its results on a
         `result_queue`. This method pulls and yields from the `result_queue`.
         """
-        # print("pikachu _call_user_generator")
         call_user_method_future = None
         wait_for_message_task = None
         try:
@@ -452,7 +452,6 @@ class ReplicaActor:
                 # print("wait_for_message_task in done", wait_for_message_task in done)
                 # Consume and yield all available messages in the queue.
                 messages = result_queue.get_messages_nowait()
-                # print("pikachu messages", messages)
                 if messages:
                     # HTTP (ASGI) messages are only consumed by the proxy so batch them
                     # and use vanilla pickle (we know it's safe because these messages
@@ -527,7 +526,6 @@ class ReplicaActor:
                     pickle.loads(request.request_args),
                     pickle.loads(request.request_kwargs),
                 ):
-                    # print("pikachu yielded result", result)
                     yield serve_pb2.ASGIResponse(msg=result)
 
             else:
@@ -536,7 +534,6 @@ class ReplicaActor:
                     pickle.loads(request.request_args),
                     pickle.loads(request.request_kwargs),
                 )
-                # print(f"pikachu about to yield asgiresponse(msg={result})")
                 yield serve_pb2.ASGIResponse(msg=result)
 
     async def handle_request_streaming(
@@ -546,7 +543,6 @@ class ReplicaActor:
         **request_kwargs,
     ) -> AsyncGenerator[Any, None]:
         """Generator that is the entrypoint for all `stream=True` handle calls."""
-        # print("pikachu handle_request_streaming")
         request_metadata = pickle.loads(pickled_request_metadata)
         with self._wrap_user_method_call(request_metadata):
             async for result in self._call_user_generator(
@@ -562,7 +558,6 @@ class ReplicaActor:
         *request_args,
         **request_kwargs,
     ) -> AsyncGenerator[Any, None]:
-        # print("pikachu handle_request_with_rejection")
         """Entrypoint for all requests with strict max_ongoing_requests enforcement.
 
         The first response from this generator is always a system message indicating
@@ -1117,8 +1112,6 @@ class UserCallableWrapper:
         but for ASGI apps (like FastAPI), the actual method will be a regular function
         implementing the ASGI `__call__` protocol.
         """
-        # print("pikachu _handle_user_method_result <result>:", result)
-        # print("pikachu request_metadata.is_streaming", request_metadata.is_streaming)
         result_is_gen = inspect.isgenerator(result)
         result_is_async_gen = inspect.isasyncgen(result)
         if request_metadata.is_streaming:

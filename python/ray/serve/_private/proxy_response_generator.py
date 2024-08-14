@@ -116,19 +116,7 @@ class ProxyResponseGenerator(_ProxyResponseGeneratorBase):
         return result
 
     async def _await_response_anext(self) -> Any:
-        # return await self._response.__anext__()
-        # print(
-        #     "pikachu, proxy response generator response",
-        #     self._response,
-        #     type(self._response),
-        # )
-        r = await self._response.__anext__()
-        # print(
-        #     "pikachu, proxy response generator await self._response.__anext__()",
-        #     type(r),
-        #     r,
-        # )
-        return r
+        return await self._response.__anext__()
 
     async def _get_next_streaming_result(self) -> Any:
         next_result_task = asyncio.create_task(self._await_response_anext())

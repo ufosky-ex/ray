@@ -343,14 +343,6 @@ class _DeploymentResponseBase:
         output ObjectRef.
         """
         if RAY_SERVE_USE_GRPC_STREAMING:
-            # print(
-            #     "pikachu inspect.isasyncgen(obj_ref_or_gen)",
-            #     inspect.isasyncgen(obj_ref_or_gen),
-            # )
-            # print(
-            #     "pikachu isinstance(self, DeploymentResponse)",
-            #     isinstance(self, DeploymentResponse),
-            # )
             return inspect.isasyncgen(obj_ref_or_gen) and isinstance(
                 self, DeploymentResponse
             )
@@ -380,18 +372,8 @@ class _DeploymentResponseBase:
                 # Use `asyncio.wrap_future` so `self._object_ref_future` can be awaited
                 # safely from any asyncio loop.
                 obj_ref_or_gen = await asyncio.wrap_future(self._object_ref_future)
-                # print(
-                #     "pikachu _to_object_ref_or_gen, obj_ref_or_gen:",
-                #     obj_ref_or_gen,
-                #     type(obj_ref_or_gen),
-                # )
                 if self._should_resolve_gen_to_obj_ref(obj_ref_or_gen):
                     obj_ref_or_gen = await obj_ref_or_gen.__anext__()
-                    # print(
-                    #     "pikachu obj_ref_or_gen after!",
-                    #     obj_ref_or_gen,
-                    #     type(obj_ref_or_gen),
-                    # )
 
                 self._object_ref_or_gen = obj_ref_or_gen
 
@@ -463,16 +445,10 @@ class _DeploymentResponseBase:
         if self._cancelled:
             return
 
-        print("cindy handle request cancelled")
         self._cancelled = True
         if not self._object_ref_future.done():
             self._object_ref_future.cancel()
         elif self._object_ref_future.exception() is None:
-            print(
-                "cindy result",
-                type(self._object_ref_future.result()),
-                self._object_ref_future.result(),
-            )
             if RAY_SERVE_USE_GRPC_STREAMING:
                 self._object_ref_future.cancel()
             else:
@@ -701,18 +677,10 @@ class DeploymentResponseGenerator(_DeploymentResponseBase):
         if self._obj_ref_gen is None:
             self._obj_ref_gen = await self._to_object_ref_gen(_record_telemetry=False)
 
-        # print(
-        #     "pikachu __anext__ self._obj_ref_gen",
-        #     self._obj_ref_gen,
-        #     type(self._obj_ref_gen),
-        # )
         if RAY_SERVE_USE_GRPC_STREAMING:
-            r = await self._obj_ref_gen.__anext__()
-            # print("pikachu __anext__ r", type(r), r)
-            return r
+            return await self._obj_ref_gen.__anext__()
 
         next_obj_ref = await self._obj_ref_gen.__anext__()
-        # print("pikachu __anext__ next_obj_ref", type(next_obj_ref), next_obj_ref)
         return await next_obj_ref
 
     def __iter__(self) -> Iterator[Any]:
