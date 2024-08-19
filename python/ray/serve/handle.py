@@ -43,9 +43,6 @@ def _create_or_get_global_asyncio_event_loop_in_thread():
 
     Thread-safe.
     """
-    if RAY_SERVE_USE_GRPC_STREAMING:
-        return asyncio.get_running_loop()
-
     global _global_async_loop
     if _global_async_loop is None:
         with _global_async_loop_creation_lock:
@@ -678,7 +675,15 @@ class DeploymentResponseGenerator(_DeploymentResponseBase):
             self._obj_ref_gen = await self._to_object_ref_gen(_record_telemetry=False)
 
         if RAY_SERVE_USE_GRPC_STREAMING:
-            return await self._obj_ref_gen.__anext__()
+
+            async def fetch_message():
+                return await self._obj_ref_gen.__aiter__().__anext__()
+
+            cc_fut = asyncio.run_coroutine_threadsafe(
+                fetch_message(), loop=_global_async_loop
+            )
+            a_fut = asyncio.wrap_future(cc_fut)
+            return await a_fut
 
         next_obj_ref = await self._obj_ref_gen.__anext__()
         return await next_obj_ref
