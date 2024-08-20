@@ -446,10 +446,6 @@ class ReplicaActor:
                     return_when=asyncio.FIRST_COMPLETED,
                 )
 
-                # print(
-                #     "call_user_method_future in done", call_user_method_future in done
-                # )
-                # print("wait_for_message_task in done", wait_for_message_task in done)
                 # Consume and yield all available messages in the queue.
                 messages = result_queue.get_messages_nowait()
                 if messages:
@@ -515,12 +511,6 @@ class ReplicaActor:
             )
 
             if request_metadata.is_streaming:
-                # async for result in self._call_user_generator(
-                #     request_metadata,
-                #     request_args,
-                #     request_kwargs,
-                # ):
-                #     yield result
                 async for result in self._call_user_generator(
                     request_metadata,
                     pickle.loads(request.request_args),

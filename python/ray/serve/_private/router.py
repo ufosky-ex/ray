@@ -604,8 +604,7 @@ class Router:
                         ref.completed()._on_completed(callback)
 
                 if RAY_SERVE_USE_GRPC_STREAMING:
-                    # return ref.__aiter__()
-                    return ref
+                    return ref.__aiter__()
                 else:
                     return ref
 

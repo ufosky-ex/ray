@@ -340,9 +340,7 @@ class _DeploymentResponseBase:
         output ObjectRef.
         """
         if RAY_SERVE_USE_GRPC_STREAMING:
-            return inspect.isasyncgen(obj_ref_or_gen) and isinstance(
-                self, DeploymentResponse
-            )
+            return False
 
         return isinstance(obj_ref_or_gen, ray.ObjectRefGenerator) and isinstance(
             self, DeploymentResponse
@@ -677,7 +675,7 @@ class DeploymentResponseGenerator(_DeploymentResponseBase):
         if RAY_SERVE_USE_GRPC_STREAMING:
 
             async def fetch_message():
-                return await self._obj_ref_gen.__aiter__().__anext__()
+                return await self._obj_ref_gen.__anext__()
 
             cc_fut = asyncio.run_coroutine_threadsafe(
                 fetch_message(), loop=_global_async_loop
