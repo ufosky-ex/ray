@@ -17,7 +17,11 @@ from ray.serve._private.common import (
     RequestMetadata,
     RequestProtocol,
 )
-from ray.serve._private.constants import RAY_SERVE_USE_GRPC_STREAMING, SERVE_LOGGER_NAME
+from ray.serve._private.constants import (
+    RAY_SERVE_GRPC_SAME_LOOP,
+    RAY_SERVE_USE_GRPC_STREAMING,
+    SERVE_LOGGER_NAME,
+)
 from ray.serve._private.default_impl import create_cluster_node_info_cache
 from ray.serve._private.router import Router
 from ray.serve._private.usage import ServeUsageTag
@@ -43,6 +47,9 @@ def _create_or_get_global_asyncio_event_loop_in_thread():
 
     Thread-safe.
     """
+    if RAY_SERVE_USE_GRPC_STREAMING and RAY_SERVE_GRPC_SAME_LOOP:
+        return asyncio.get_running_loop()
+
     global _global_async_loop
     if _global_async_loop is None:
         with _global_async_loop_creation_lock:
@@ -673,15 +680,18 @@ class DeploymentResponseGenerator(_DeploymentResponseBase):
             self._obj_ref_gen = await self._to_object_ref_gen(_record_telemetry=False)
 
         if RAY_SERVE_USE_GRPC_STREAMING:
-
-            async def fetch_message():
+            if RAY_SERVE_GRPC_SAME_LOOP:
                 return await self._obj_ref_gen.__anext__()
+            else:
 
-            cc_fut = asyncio.run_coroutine_threadsafe(
-                fetch_message(), loop=_global_async_loop
-            )
-            a_fut = asyncio.wrap_future(cc_fut)
-            return await a_fut
+                async def fetch_message():
+                    return await self._obj_ref_gen.__anext__()
+
+                cc_fut = asyncio.run_coroutine_threadsafe(
+                    fetch_message(), loop=_global_async_loop
+                )
+                a_fut = asyncio.wrap_future(cc_fut)
+                return await a_fut
 
         next_obj_ref = await self._obj_ref_gen.__anext__()
         return await next_obj_ref
