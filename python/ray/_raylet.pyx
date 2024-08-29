@@ -1419,15 +1419,9 @@ async def execute_streaming_generator_async(
                 # are currently under backpressure. Then we need to wait for an
                 # ack from the caller (the reply for a possibly previous report
                 # RPC) that they have consumed more ObjectRefs.
-                # await loop.run_in_executor(
-                #     executor,
-                #     report_streaming_generator_output,
-                #     context,
-                #     output,
-                #     cur_generator_index,
-                #     interrupt_signal_event,
-                # )
-                report_streaming_generator_output(
+                await loop.run_in_executor(
+                    executor,
+                    report_streaming_generator_output,
                     context,
                     output,
                     cur_generator_index,
