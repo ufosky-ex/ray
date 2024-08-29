@@ -354,7 +354,9 @@ class _DeploymentResponseBase:
         output ObjectRef.
         """
         if RAY_SERVE_USE_GRPC_STREAMING:
-            return False
+            return inspect.isasyncgen(obj_ref_or_gen) and isinstance(
+                self, DeploymentResponse
+            )
 
         return isinstance(obj_ref_or_gen, ray.ObjectRefGenerator) and isinstance(
             self, DeploymentResponse
