@@ -265,7 +265,13 @@ if setup_spec.type == SetupType.RAY:
             "fastapi",
             "watchfiles",
         ],
-        "tune": ["pandas", "tensorboardX>=1.9", "requests", "pyarrow >= 6.0.1", "fsspec"],
+        "tune": [
+            "pandas",
+            "tensorboardX>=1.9",
+            "requests",
+            "pyarrow >= 6.0.1",
+            "fsspec",
+        ],
         "observability": [
             "opentelemetry-api",
             "opentelemetry-sdk",
