@@ -228,6 +228,16 @@ if setup_spec.type == SetupType.RAY:
     pandas_dep = "pandas >= 1.3"
     numpy_dep = "numpy >= 1.20"
     setup_spec.extras = {
+        "adag": [
+            "cupy-cuda12x; sys_platform != 'darwin'",
+        ],
+        "client": [
+            # The Ray client needs a specific range of gRPC to work:
+            # Tracking issues: https://github.com/grpc/grpc/issues/33714
+            "grpcio != 1.56.0"
+            if sys.platform == "darwin"
+            else "grpcio",
+        ],
         "data": [
             numpy_dep,
             pandas_dep,
@@ -251,12 +261,10 @@ if setup_spec.type == SetupType.RAY:
             "virtualenv >=20.0.24, !=20.21.1",  # For pip runtime env.
             "memray; sys_platform != 'win32'",
         ],
-        "client": [
-            # The Ray client needs a specific range of gRPC to work:
-            # Tracking issues: https://github.com/grpc/grpc/issues/33714
-            "grpcio != 1.56.0"
-            if sys.platform == "darwin"
-            else "grpcio",
+        "observability": [
+            "opentelemetry-api",
+            "opentelemetry-sdk",
+            "opentelemetry-exporter-otlp",
         ],
         "serve": [
             "uvicorn[standard]",
@@ -265,18 +273,7 @@ if setup_spec.type == SetupType.RAY:
             "fastapi",
             "watchfiles",
         ],
-        "tune": [
-            "pandas",
-            "tensorboardX>=1.9",
-            "requests",
-            "pyarrow >= 6.0.1",
-            "fsspec",
-        ],
-        "observability": [
-            "opentelemetry-api",
-            "opentelemetry-sdk",
-            "opentelemetry-exporter-otlp",
-        ],
+        "tune": ["pandas", "tensorboardX>=1.9", "requests", "pyarrow >= 6.0.1", "fsspec"],
     }
 
     # Ray Serve depends on the Ray dashboard components.
