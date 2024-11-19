@@ -65,11 +65,11 @@ def test_get_datasets():
     assert len(operators) == 2
     op0 = operators[0]
     assert sorted(op0.keys()) == sorted(OPERATOR_SCHEMA)
-    assert op0["operator"] == "Input0"
+    assert op0["operator"] == "Input_0"
     assert op0["progress"] == 20
     assert op0["total"] == 20
     assert op0["state"] == "FINISHED"
-    assert operators[1]["operator"] == "ReadRange->MapBatches(<lambda>)1"
+    assert operators[1]["operator"] == "ReadRange->MapBatches(<lambda>)_1"
 
     ds.map_batches(lambda x: x).materialize()
     data = requests.get(DATA_HEAD_URLS["GET"].format(job_id=job_id)).json()

@@ -398,7 +398,7 @@ class StreamingExecutor(Executor, threading.Thread):
             "total": last_op.num_outputs_total(),
             "end_time": time.time() if state != "RUNNING" else None,
             "operators": {
-                f"{op.name}{i}": {
+                f"{op.name}_{i}": {
                     "progress": op_state.num_completed_tasks,
                     "total": op.num_outputs_total(),
                     "state": state,
